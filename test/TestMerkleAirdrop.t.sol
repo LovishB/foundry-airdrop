@@ -5,8 +5,6 @@ import {Test, console} from "forge-std/Test.sol";
 import { MerkleAirdrop, IERC20 } from "../src/MerkleAirdrop.sol";
 import { BagelToken } from "../src/BagelToken.sol";
 import { DeployMerkleAirdrop } from "../script/DeployMerkleAirdrop.s.sol";
-
-
 contract TestMerkleAirdrop is Test {
 
     MerkleAirdrop public airdrop;
@@ -17,6 +15,7 @@ contract TestMerkleAirdrop is Test {
     address public user2 = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
     address public user3 = 0x2ea3970Ed82D5b30be821FAAD4a731D35964F7dd;
     address public user4 = 0xf6dBa02C01AF48Cf926579F77C9f874Ca640D91D;
+    address public claimer = makeAddr("claimer");
     
     // Proofs from the provided Merkle tree data
     bytes32[][] public proofs = [
@@ -112,5 +111,91 @@ contract TestMerkleAirdrop is Test {
         );
         airdrop.claim(user3, AIRDROP_AMOUNT, proofs[2]);
         vm.stopPrank();
+    }
+
+
+    // Test Claim with Signature
+    function testClaimWithSignature() public {
+        vm.startPrank(claimer);
+        uint256 initialBalance = bagelToken.balanceOf(user2);
+        // get the sign of user2 (anvil's first address)
+        bytes32 CLAIM_TYPEHASH = keccak256("Claim(address account,uint256 amount,bytes32[] merkleProof)");
+
+        bytes32 structHash = keccak256(abi.encode(
+            CLAIM_TYPEHASH,
+            user2,
+            AIRDROP_AMOUNT,
+            keccak256(abi.encodePacked(proofs[1]))
+        ));
+        bytes32 digest = _hashTypedDataV4(structHash);
+
+        // Sign the message digest
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80, digest);
+
+        // Pack the signature components into a single bytes variable
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        airdrop.claimWithSignature(user2, AIRDROP_AMOUNT, proofs[1], signature);
+        assertEq(
+            bagelToken.balanceOf(user2),
+            initialBalance + AIRDROP_AMOUNT,
+            "User should receive correct token amount"
+        );
+        vm.stopPrank();
+        assertEq(bagelToken.balanceOf(address(airdrop)), AIRDROP_AMOUNT * 3, "Airdrop contract has enough tokens");
+    }
+
+    // Test Claim with Signature VRS
+    function testClaimWithSignatureVRS() public {
+        vm.startPrank(claimer);
+        uint256 initialBalance = bagelToken.balanceOf(user2);
+        // get the sign of user2 (anvil's first address)
+        bytes32 CLAIM_TYPEHASH = keccak256("Claim(address account,uint256 amount,bytes32[] merkleProof)");
+
+        bytes32 structHash = keccak256(abi.encode(
+            CLAIM_TYPEHASH,
+            user2,
+            AIRDROP_AMOUNT,
+            keccak256(abi.encodePacked(proofs[1]))
+        ));
+        bytes32 digest = _hashTypedDataV4(structHash);
+
+        // Sign the message digest
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80, digest);
+
+        airdrop.claimWithSignatureVRS(user2, AIRDROP_AMOUNT, proofs[1], v, r, s);
+        assertEq(
+            bagelToken.balanceOf(user2),
+            initialBalance + AIRDROP_AMOUNT,
+            "User should receive correct token amount"
+        );
+        vm.stopPrank();
+        assertEq(bagelToken.balanceOf(address(airdrop)), AIRDROP_AMOUNT * 3, "Airdrop contract has enough tokens");
+    }
+
+    /**
+    * @dev Implementation of _hashTypedDataV4 from OpenZeppelin's EIP712 contract
+    * Returns the hash of the fully encoded EIP712 message for this domain
+    */
+    function _hashTypedDataV4(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            "\x19\x01",
+            _domainSeparatorV4(),
+            structHash
+        ));
+    }
+
+    /**
+    * @dev Implementation of _domainSeparatorV4 from OpenZeppelin's EIP712 contract
+    * @dev Returns the domain separator for the current chain.
+    */
+    function _domainSeparatorV4() internal view returns (bytes32) {
+        return keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256("MerkleAirdrop"),  // name
+            keccak256("1"),              // version
+            block.chainid,               // chainId
+            address(airdrop)             // verifyingContract
+        ));
     }
 }
