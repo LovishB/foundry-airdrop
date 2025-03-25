@@ -2,6 +2,9 @@
 
 This repository contains Solidity smart contracts for the Bagel Token (BT) ERC20 token and a Merkle tree-based airdrop system that allows for secure and gas-efficient token distribution.
 
+## Architecture Overview
+![Bagel Token & Merkle Airdrop Architecture](./bagel-token-architecture.svg)
+
 ## Contracts
 
 ### BagelToken.sol
